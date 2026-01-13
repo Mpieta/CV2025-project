@@ -1,0 +1,1 @@
+lightning_logs/version_20/checkpoints/epoch=0-step=1932.ckpt filter=lfs diff=lfs merge=lfs -text
