@@ -90,6 +90,10 @@ class ExerciseVideoDataset(Dataset):
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter(output_path, fourcc, 10, (W, H))
             
+            if not out.isOpened():
+                print(f"Failed to open video writer for {output_path}")
+                return
+
             for i in range(T):
                 frame = vid[i] 
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) 
@@ -124,14 +128,25 @@ class ExerciseVideoDataset(Dataset):
         
         video_tensor = video_tensor.permute(0, 3, 1, 2) 
 
-        if self.debug and idx < 5: 
-            self._save_debug_video(video_tensor, f"sample_{idx}_orig")
+        should_save = False
+        if self.debug:
+            try:
+                files_count = len([name for name in os.listdir(self.debug_dir) if name.endswith('.mp4')])
+                if files_count < 10: 
+                    should_save = True
+            except:
+                pass 
+
+        if should_save: 
+            vid_name = sample['vid_id'].replace('/', '_') 
+            self._save_debug_video(video_tensor, f"vid_{vid_name}_idx{idx}_orig")
 
         if self.transform:
             video_tensor = self.transform(video_tensor)
 
-        if self.debug and idx < 5:
-            self._save_debug_video(video_tensor, f"sample_{idx}_aug")
+        if should_save:
+            vid_name = sample['vid_id'].replace('/', '_')
+            self._save_debug_video(video_tensor, f"vid_{vid_name}_idx{idx}_aug")
             print(f"Saved debug videos for sample {idx}")
 
         video_tensor = video_tensor.permute(1, 0, 2, 3) 
@@ -153,9 +168,9 @@ class ExerciseVideoDataModule(pl.LightningDataModule):
         self.debug = debug
 
         self.train_transform = v2.Compose([
-            v2.ToDtype(torch.float32, scale=True), 
-            v2.Resize((140, 140)),  
-            v2.RandomResizedCrop(size=(128, 128), scale=(0.8, 1.0)), 
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Resize(450),  
+            v2.RandomResizedCrop(size=(400, 300), scale=(0.7, 1.0)), 
             v2.RandomHorizontalFlip(p=0.5), 
             v2.RandomRotation(degrees=10), 
             v2.Normalize(mean=[0.4321, 0.3946, 0.3764], std=[0.2280, 0.2214, 0.2169])
@@ -163,7 +178,8 @@ class ExerciseVideoDataModule(pl.LightningDataModule):
 
         self.val_transform = v2.Compose([
             v2.ToDtype(torch.float32, scale=True),
-            v2.Resize((128, 128)),
+            v2.Resize(450),
+            v2.CenterCrop(size=(400, 300)),
             v2.Normalize(mean=[0.4321, 0.3946, 0.3764], std=[0.2280, 0.2214, 0.2169])
         ])
 
