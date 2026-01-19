@@ -4,18 +4,22 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from torchvision.models.video import r3d_18, R3D_18_Weights
 from Dataset import ExerciseVideoDataModule
+from sparse_model import SparseModel
+
 
 
 class ExerciseDetector(pl.LightningModule):
-    def __init__(self, num_classes=16, lr=1e-3):
+    def __init__(self, num_classes=16, lr=1e-3, model_name = "pretrained_resnet"):
         super().__init__()
         self.save_hyperparameters()
         self.lr = lr
 
         # pretrained resnet3d
-        self.model = r3d_18(weights=R3D_18_Weights.DEFAULT)
-
-        self.model.fc = nn.Linear(self.model.fc.in_features, num_classes)
+        if model_name == "pretrained_resnet":
+            self.model = r3d_18(pretrained=True)
+            self.model.fc = nn.Linear(self.model.fc.in_features, num_classes)
+        elif model_name == "mobilenet_v2_3d":
+            self.model = SparseModel(num_classes=num_classes)
 
         weights = torch.ones(num_classes)
 
@@ -58,10 +62,10 @@ if __name__ == '__main__':
         video_dir="dataset/dataset/anon",
         label_dir="dataset/labels",
         split_csv="dataset/split.csv",
-        batch_size=16
+        batch_size=32
     )
 
-    model = ExerciseDetector(num_classes=17)
+    model = ExerciseDetector(num_classes=17, model_name="mobilenet_v2_3d")
 
     trainer = pl.Trainer(
         accelerator="gpu",
