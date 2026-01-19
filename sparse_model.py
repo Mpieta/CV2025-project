@@ -16,20 +16,20 @@ class InvertedResidual3d(nn.Module):
     def __init__(self, inp, oup, stride, expand_ratio):
         super(InvertedResidual3d, self).__init__()
         self.stride = stride
-        assert stride in [1, 2]
-
         hidden_dim = round(inp * expand_ratio)
         self.use_res_connect = self.stride == 1 and inp == oup
+        is_stride_1 = (stride == 1) if isinstance(stride, int) else (all(s == 1 for s in stride))
+        self.use_res_connect = is_stride_1 and inp == oup
 
         layers = []
         if expand_ratio != 1:
-            # pw (pointwise) - ekspansja
+            # pw (pointwise)
             layers.append(Conv3dBNReLU(inp, hidden_dim, kernel_size=1))
 
         layers.extend([
-            # dw (depthwise) - splot "sparse" (niezależny dla kanałów)
+            # dw (depthwise)
             Conv3dBNReLU(hidden_dim, hidden_dim, stride=stride, groups=hidden_dim),
-            # pw-linear (pointwise) - projekcja
+            # pw-linear (pointwise)
             nn.Conv3d(hidden_dim, oup, 1, 1, 0, bias=False),
             nn.BatchNorm3d(oup),
         ])
@@ -43,13 +43,11 @@ class InvertedResidual3d(nn.Module):
 
 
 class SparseModel(nn.Module):
-    def __init__(self, num_classes=16, sample_size=128, width_mult=1.0):
+    def __init__(self, num_classes=16, sample_size=128, width_mult=1.0, mode='standard'):
         super(SparseModel, self).__init__()
         input_channel = 32
         last_channel = 1280
 
-        # Konfiguracja bloków: [expand_ratio, channels, n_blocks, stride]
-        # Dostosowane pod wideo (mniejsze stride czasowe na początku, żeby nie zgubić ruchu)
         interverted_residual_setting = [
             # t, c, n, s
             [1, 16, 1, 1],
@@ -60,13 +58,22 @@ class SparseModel(nn.Module):
             [6, 160, 3, 2],
             [6, 320, 1, 1],
         ]
+        if mode == "high_temporal":
+            interverted_residual_setting = [
+                [1, 16, 1, 1],
+                [6, 24, 2, (1, 2, 2)],
+                [6, 32, 3, (1, 2, 2)],
+                [6, 64, 4, (1, 2, 2)],
+                [6, 96, 3, 1],
+                [6, 160, 3, (1, 2, 2)],
+                [6, 320, 1, 1],
+            ]
 
         input_channel = int(input_channel * width_mult)
         self.last_channel = int(last_channel * width_mult) if width_mult > 1.0 else last_channel
 
         self.features = [Conv3dBNReLU(3, input_channel, stride=(1, 2, 2))]
 
-        # Budowanie bloków Inverted Residual
         for t, c, n, s in interverted_residual_setting:
             output_channel = int(c * width_mult)
             for i in range(n):
@@ -87,7 +94,7 @@ class SparseModel(nn.Module):
     def forward(self, x):
         # x: [Batch, 3, Frames, Height, Width]
         x = self.features(x)
-        # Global Average Pooling (przestrzenno-czasowy)
+        # Global Average Pooling
         x = nn.functional.adaptive_avg_pool3d(x, (1, 1, 1))
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
