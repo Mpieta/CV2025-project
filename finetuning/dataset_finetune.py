@@ -3,13 +3,11 @@ import cv2
 import torch
 import pandas as pd
 import numpy as np
-import random
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import pytorch_lightning as pl
 
-# Mapowania (takie same jak w projekcie)
 RAW_LABELS = [-1, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 LABEL_MAP = {raw: i for i, raw in enumerate(RAW_LABELS)}
 
@@ -25,8 +23,6 @@ class ConsistencyDataset(Dataset):
         self._prepare_samples()
 
     def _prepare_samples(self):
-        # Tutaj logika podobna jak w oryginale, ale bierzemy wszystko (bez pomijania negatywów)
-        # albo z pomijaniem - zależnie jak chcesz. Tu wersja uproszczona:
         for vid_id in self.ids:
             video_path = os.path.join(self.video_dir, f"{vid_id}.mp4")
             label_path = os.path.join(self.label_dir, f"{vid_id}.csv")
@@ -36,7 +32,6 @@ class ConsistencyDataset(Dataset):
 
             df = pd.read_csv(label_path, header=None)
 
-            # Krok co clip_length (bez nakładania, żeby było szybciej dla finetuningu)
             for start_idx in range(0, len(df) - self.clip_length - 1, self.clip_length):
                 raw_label = df.iloc[start_idx + self.clip_length // 2, 2]
 
@@ -57,7 +52,6 @@ class ConsistencyDataset(Dataset):
         cap.set(cv2.CAP_PROP_POS_FRAMES, sample['start_frame'] - 1)
 
         frames = []
-        # Pobieramy clip_length + 1 klatek (np. 17)
         for _ in range(self.clip_length + 1):
             ret, frame = cap.read()
             if not ret:
@@ -71,10 +65,9 @@ class ConsistencyDataset(Dataset):
             frames.append(img)
         cap.release()
 
-        # Budujemy dwa tensory przesunięte o 1 klatkę
-        # Clip A: klatki 0..15
+        # Clip A: frames 0..15
         clip_a = torch.stack(frames[:-1], dim=1)
-        # Clip B: klatki 1..16
+        # Clip B: frames 1..16
         clip_b = torch.stack(frames[1:], dim=1)
 
         return clip_a, clip_b, sample['label']
@@ -86,7 +79,7 @@ class ConsistencyDataModule(pl.LightningDataModule):
         self.video_dir = video_dir
         self.label_dir = label_dir
         self.split_csv = split_csv
-        self.batch_size = batch_size  # Mniejszy batch bo mamy 2x więcej danych (pary)
+        self.batch_size = batch_size
         self.clip_length = clip_length
 
         self.transform = transforms.Compose([
@@ -97,7 +90,6 @@ class ConsistencyDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         df = pd.read_csv(self.split_csv)
-        # Do finetuningu używamy tylko zbioru treningowego
         train_ids = df[df['split'] == 'train']['id'].tolist()
 
         self.train_ds = ConsistencyDataset(

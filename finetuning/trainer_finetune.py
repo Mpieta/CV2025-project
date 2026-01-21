@@ -2,13 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-# Zakładam, że sparse_model.py jest w głównym katalogu, więc dodajemy ścieżkę
 import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from sparse_model import SparseModel  # Upewnij się, że masz ten plik w głównym folderze
+from sparse_model import SparseModel
 from torchvision.models.video import r3d_18
 
 

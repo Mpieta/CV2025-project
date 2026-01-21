@@ -42,7 +42,6 @@ def run_finetuning():
 
     trainer.fit(model, dm)
 
-    # 5. Zapis wyniku
     torch.save(model.model.state_dict(), "../exercise_model_finetuned.pt")
     print("Finetuning complete! Model saved.")
 
